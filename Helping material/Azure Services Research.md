@@ -1,0 +1,1 @@
+### Research about different Azure Services that may we use in the journey of our project (including their features, usage, etc ..), as well as different services we could use
