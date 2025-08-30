@@ -3,14 +3,16 @@ import http from 'http';
 import cors from 'cors';
 import { init } from './socket/index.js';
 import studentRoutes from './routes/student.js';
-import { PORT, FE_ORIGINS } from './config/env.js';
+import { initTF } from './services/check-similarity/tf-init.js';
+import { PORT, FE_ORIGIN } from './config/env.js';
+import scoreRoutes from './routes/score.js';
 import { initializeDbConnection } from './services/db.js'; 
 
 const app = express();
 const server = http.createServer(app);
 
 app.use(cors({
-    origin: FE_ORIGINS,
+    origin: FE_ORIGIN,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: [
         'Content-Type',
@@ -20,8 +22,10 @@ app.use(cors({
     ]
 }));
 
-app.use('/student', studentRoutes);
+app.use('/api/score', scoreRoutes);
+app.use('/api/student', studentRoutes);
 
+await initTF();
 init(server);
 
 (async () => {
