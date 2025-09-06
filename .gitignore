@@ -1,6 +1,5 @@
 */node_modules/
 
-__pycache__/
 *.pyc
 
 .env
@@ -11,3 +10,5 @@ venv/
 *.sh
 .DS_Store
 bash
+__pycache__/
+*.pyc
