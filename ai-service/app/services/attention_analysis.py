@@ -1,22 +1,22 @@
 import time
 import threading
-from typing import Dict
+from typing import Dict, Optional
 
 from services.frame_processor import FrameProcessingService
-from services.batch_manager import BatchManager
+from services.calibration_storage import CalibrationStorageService
 from ml_logic.face_mesh_pipeline import FaceMeshError
-from ml_logic.dummy_model import DummyAttentionModel
+from ml_logic.attention_classifier import AttentionClassifier
 
 class AttentionAnalysisService:
     def __init__(
-        self,
-        frame_service=None,
-        batch_manager=None,
-        dummy_model=None
+        self, 
+        frame_service=None, 
+        attention_classifier=None,
+        calibration_storage=None
     ):
         self.frame_service = frame_service or FrameProcessingService()
-        self.batch_manager = batch_manager or BatchManager(4)
-        self.dummy_model = dummy_model or DummyAttentionModel()
+        self.attention_classifier = attention_classifier or AttentionClassifier()
+        self.calibration_storage = calibration_storage or CalibrationStorageService()
         self._lock = threading.RLock()
         self._is_closed = False
 
@@ -30,7 +30,13 @@ class AttentionAnalysisService:
             except Exception:
                 pass
 
-    def analyze_frame_from_base64(self, student_id: str, frame_base64: str, frame_timestamp: str) -> Dict:
+    def analyze_frame_from_base64(
+        self, 
+        student_id: str, 
+        frame_id: str, 
+        frame_base64: str, 
+        frame_timestamp: str
+    ) -> Dict:
         if self._is_closed:
             raise RuntimeError("Service is closed")
 
@@ -42,54 +48,73 @@ class AttentionAnalysisService:
                 frame_timestamp.strip()
             )
 
-            batch_result = self.batch_manager.add_frame(student_id.strip(), frame_result)
-
-            if batch_result["is_complete"]:
-                end_time = time.time()
-                faces_detected = sum(1 for frame in batch_result["frames"] if frame.get('face_detected', False))
+            end_time = time.time()
+            
+            face_detected = frame_result.get('face_detected', False)
+            face_features = frame_result.get('face_features', {})
+            
+            has_calibration = self.calibration_storage.has_calibration(student_id)
+            calibration_data = None
+            calibration_stored = False
+            
+            if not has_calibration and face_detected:
+                calibration_values = self.attention_classifier.extract_calibration_values(face_features)
+                if calibration_values[0] is not None or calibration_values[1] is not None:
+                    calibration_stored = self.calibration_storage.store_calibration(
+                        student_id, 
+                        calibration_values[0], 
+                        calibration_values[1]
+                    )
+                    calibration_data = calibration_values
+            elif has_calibration:
+                calibration_data = self.calibration_storage.get_calibration(student_id)
+            
+            attention_label = self.attention_classifier.classify_attention(
+                face_features,
+                face_detected,
+                calibration_data
+            )
+            
+            response = {
+                "status": "success", 
+                "student_id": student_id.strip(),
+                "frame_id": frame_id.strip(),
+                "face_detected": face_detected,
+                "attention_label": attention_label,
+                "processing_timestamp": {
+                    "start": start_time,
+                    "end": end_time, 
+                    "duration": end_time - start_time
+                }
+            }
+            
+            if calibration_stored:
+                response["calibration_stored"] = True
+            if calibration_data:
+                response["using_calibration"] = True
                 
-                return {
-                    "status": "success", 
-                    "student_id": student_id.strip(),
-                    "frames_processed": len(batch_result["frames"]),
-                    "faces_detected": faces_detected,
-                    "frames": batch_result["frames"],
-                    "is_batch_complete": True,
-                    "processing_timestamp": {
-                        "start": start_time,
-                        "end": end_time, 
-                        "duration": end_time - start_time
-                    }
-                }
-            else:
-                return {
-                    "status": "waiting_for_more_frames",
-                    "received_frames": batch_result["frames_waiting"],
-                    "frames_needed": batch_result["frames_needed"],
-                    "is_batch_complete": False
-                }
+            return response
 
         except Exception as e:
-            self.batch_manager.remove_student(student_id)
             raise FaceMeshError(f"Error during analysis: {e}")
 
-    def analyze_frame(self, student_id: str, image_data: bytes, frame_timestamp: str) -> Dict:
+    def analyze_frame(
+        self, 
+        student_id: str, 
+        frame_id: str, 
+        image_data: bytes, 
+        frame_timestamp: str
+    ) -> Dict:
         import base64
         frame_base64 = base64.b64encode(image_data).decode('utf-8')
-        return self.analyze_frame_from_base64(student_id, frame_base64, frame_timestamp)
-
-    def get_stats(self) -> Dict:
-        stats = self.batch_manager.get_stats()
-        stats["is_closed"] = self._is_closed
-        return stats
-
-    def clear_incomplete_batches(self) -> Dict:
-        if self._is_closed:
-            return {"message": "Service is closed", "cleared": 0}
-
-        result = self.batch_manager.clear_all()
-        result["message"] = f"Cleared {result['cleared_count']} incomplete batches"
-        return result
-
-    def get_student_batch_status(self, student_id: str) -> Dict:
-        return self.batch_manager.get_student_status(student_id)
+        return self.analyze_frame_from_base64(student_id, frame_id, frame_base64, frame_timestamp)
+        
+    def get_calibration_status(self, student_id: str) -> Dict:
+        calibration = self.calibration_storage.get_calibration(student_id)
+        if calibration:
+            return {
+                "has_calibration": True,
+                "left_gaze_deviation": calibration[0],
+                "right_gaze_deviation": calibration[1]
+            }
+        return {"has_calibration": False}
