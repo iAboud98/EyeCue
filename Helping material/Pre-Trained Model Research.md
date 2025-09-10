@@ -1,1 +1,0 @@
-### Research about Pre-Trained models we can use and they serve the same goal as our project 
