@@ -2,8 +2,12 @@ import { processFrame } from '../services/fastapi.js';
 import { getIO } from '../socket/index.js';
 import { recordAttentionData } from '../services/session.js';
 import { compareAgainstPrevious } from '../services/check-similarity/similarity.js';
+import { processAttentionWithCounter } from '../services/attentionStabilization.js';
+import { updateStudent } from '../services/studentState.js';
+import { computeAlertFlag } from '../services/alert.js';
 
 export async function frameHandler(req, res) {
+
     const frame = req.file?.buffer;
     const studentId = req.body.studentId;
     const studentName = req.body.studentName;
@@ -35,8 +39,25 @@ export async function frameHandler(req, res) {
         console.log(`Frame received from FE, size: ${frame.length} bytes`);
 
         const frameBase64 = frame.toString('base64');
+
         console.log('Processing frame for student:', studentId);
+
         const analysisResult = await processFrame(frameBase64, studentId, timestamp);
+
+        const stabilizationResult = processAttentionWithCounter(
+            6, 
+            studentId, 
+            analysisResult.attentionLabel
+        );
+
+        console.log(`Stabilization for ${studentId}: Stable=${stabilizationResult.stableState}, Counter=${stabilizationResult.counter}`);
+
+        if (stabilizationResult.shouldUpdate) {
+            recordAttentionData(studentId, timestamp, stabilizationResult.stableState);
+        }
+        updateStudent(studentId, analysisResult.attentionLabel);
+
+        const alertFlag = computeAlertFlag();
 
         recordAttentionData(studentId, timestamp, analysisResult.attentionLabel);
 
@@ -46,17 +67,20 @@ export async function frameHandler(req, res) {
 
         io.emit('attentionUpdate', {
             studentId: analysisResult.studentId,
+            alert: alertFlag,
             studentName: studentName,
-            label: analysisResult.label,
+            label: stabilizationResult.stableState, 
             analysis: analysisResult,
-            timestamp: timestamp
+            timestamp: timestamp,
+            stabilization: stabilizationResult
         });
 
         return res.status(200).json({
             success: true,
             analysis: analysisResult,
             studentId: studentId,
-            timestamp: timestamp
+            timestamp: timestamp,
+            stabilization: stabilizationResult
         });
 
     } catch (error) {
