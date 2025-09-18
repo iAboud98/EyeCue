@@ -5,6 +5,11 @@ import { useSocket } from "../../hooks/useSocket";
 import SessionControl from "../../components/session/session"; 
 import LeaveSession from "../../components/leaveSession/leaveSession";
 import "./dashboard.css";
+import NoStudentPNG from "../../icons/student.png";
+import { ReactComponent as DashboardSVG } from "../../icons/dashboard.svg";
+import { ReactComponent as DebugSVG } from "../../icons/debug.svg";
+import { ReactComponent as ReportSVG } from "../../icons/report.svg";
+
 import {
   getSessionDuration,
   filterStudents,
@@ -18,6 +23,7 @@ import Sidebar from "../../components/sidebar/sidebar";
 import Header from "../../components/header/header";
 import StudentCard from "../../components/studentCard/studentCard";
 import DebugView from "../debug/debug";
+import ReportView from "../report/reportView";
 
 const Dashboard = () => {
   const [students, setStudents] = useState([]);
@@ -36,7 +42,6 @@ const Dashboard = () => {
   const [sessionDuration, setSessionDuration] = useState("00:00");
   const [currentView, setCurrentView] = useState("overview");
   const [currentSessionId, setCurrentSessionId] = useState(null);
-
   const handleAttentionUpdate = useCallback((data) => {
     if (!currentSessionId) {
       console.log('Ignoring attention update - no active session');
@@ -84,7 +89,6 @@ const Dashboard = () => {
       attentivePercentage: 0
     });
   };
-
   const handleSessionEnd = (sessionId) => {
     console.log('Session ended:', sessionId);
     setCurrentSessionId(null);
@@ -92,6 +96,7 @@ const Dashboard = () => {
     setSessionStartTime(null);
     setLastUpdate(null);
   };
+
 
   const filteredStudents = filterStudents(students, searchTerm, selectedFilter);
   const sortedAndFilteredStudents = sortStudents(filteredStudents, sortType);
@@ -108,24 +113,21 @@ const Dashboard = () => {
       id: "overview",
       label: "Dashboard",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="20" x2="12" y2="10"></line>
-          <line x1="18" y1="20" x2="18" y2="4"></line>
-          <line x1="6" y1="20" x2="6" y2="16"></line>
-        </svg>
+        <DashboardSVG/>
       )
     },
     {
       id: "debug",
       label: "Detailed Analytics",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="6" y1="20" x2="6" y2="10"></line>
-          <line x1="12" y1="20" x2="12" y2="4"></line>
-          <line x1="18" y1="20" x2="18" y2="14"></line>
-          
-          <polyline points="4,16 8,12 12,14 16,8 20,10"></polyline>
-        </svg>
+        <DebugSVG/>
+      )
+    },
+    {
+      id: "report",
+      label: "Generate Report",
+      icon: (
+        <ReportSVG/>
       )
     }
   ];
@@ -142,6 +144,24 @@ const Dashboard = () => {
     ...(lastUpdate ? [{ label: "Last Update", value: lastUpdate }] : [])
   ] : [];
 
+  const getViewTitle = () => {
+    switch (currentView) {
+      case "overview": return { title: "Attention", accent: "Dashboard" };
+      case "debug": return { title: "Detailed", accent: "Analytics" };
+      case "report": return { title: "Session", accent: "Report" };
+      default: return { title: "Attention", accent: "Dashboard" };
+    }
+  };
+
+  const getViewSubtitle = () => {
+    switch (currentView) {
+      case "overview": return "Monitor student attention states in real-time";
+      case "debug": return "Detailed analytics and monitoring data";
+      case "report": return "Generate comprehensive attention reports";
+      default: return "Monitor student attention states in real-time";
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <div className="background-pattern"></div>
@@ -157,11 +177,9 @@ const Dashboard = () => {
       <main className="main-content">
         <Header 
           titleProps={{
-            title: currentView === "overview" ? "Attention" : "Detailed",
-            accent: currentView === "overview" ? "Dashboard" : "Analytics",
-            subtitle: currentView === "overview" 
-              ? "Monitor student attention states in real-time"
-              : "Detailed analytics and monitoring data"
+            title: getViewTitle().title,
+            accent: getViewTitle().accent,
+            subtitle: getViewSubtitle()
           }}
           searchControlsProps={{
             searchTerm,
@@ -185,10 +203,10 @@ const Dashboard = () => {
         
         <section className="content-body">
           {currentView === "overview" ? (
-            <div className="simple-students-grid">
+            <div className="students-grid">
               {sortedAndFilteredStudents.length === 0 ? (
                 <div className="no-students">
-                  <div className="no-students-icon">👥</div>
+                  <img src={NoStudentPNG} alt="No Students" width={80} height={80} />
                   <h3>No Students Found</h3>
                   <p>Start a camera session to see real-time attention data</p>
                 </div>
@@ -202,13 +220,19 @@ const Dashboard = () => {
                 ))
               )}
             </div>
-          ) : (
+          ) : currentView === "debug" ? (
             <DebugView 
               students={students}
               isSessionActive={isSessionActive}
               sortedAndFilteredStudents={sortedAndFilteredStudents}
             />
-          )}
+          ) : currentView === "report" ? (
+            <ReportView 
+              currentSessionId={currentSessionId} 
+              isSessionActive={isSessionActive} 
+            />
+          ) : null}
+
         </section>
       </main>
       

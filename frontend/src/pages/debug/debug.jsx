@@ -1,3 +1,5 @@
+import NoStudentPNG from "../../icons/student.png";
+
 const DebugView = ({ 
   students, 
   isSessionActive, 
@@ -7,7 +9,7 @@ const DebugView = ({
     <div className="students-grid">
       {sortedAndFilteredStudents.length === 0 ? (
         <div className="no-students">
-          <div className="no-students-icon">👥</div>
+          <img src={NoStudentPNG} alt="No Students" width={80} height={80} />
           <h3>No Students Found</h3>
           <p>Start a camera session to see detailed analysis data</p>
         </div>
