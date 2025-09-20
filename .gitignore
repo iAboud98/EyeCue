@@ -12,3 +12,5 @@ venv/
 bash
 __pycache__/
 *.pyc
+
+node_modules/
